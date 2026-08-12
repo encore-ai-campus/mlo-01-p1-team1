@@ -11,6 +11,9 @@ TARGET_HOUR="$(date '+%Hh')"
 REMOTE_DIR="/home/ec2-user/logs/mysql/system_stat/${TARGET_DATE}/${TARGET_HOUR}"
 
 for number in {1..6}; do
+  log_file="${SOURCE_DIR}/system_stat.log.${number}"
+
   scp -i "${PEM_PATH}" "${SOURCE_DIR}/system_stat.log.${number}" \
     "ec2-user@${DESTINATION_IP}:${REMOTE_DIR}/"
+  rm -rf ${log_file}
 done
