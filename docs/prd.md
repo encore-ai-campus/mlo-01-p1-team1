@@ -147,6 +147,34 @@ EC2는 private subnet에 배치하고 SSM, `.pem`으로 관리하며, cron으로
 | `collected_at` | `DATETIME` | Y | 수집 시각 |
 | `raw_hash` | `CHAR(64)` | Y | 원본 추적 checksum |
 
++--------------------+-------------------+------+-----+---------+-------+
+| Field              | Type              | Null | Key | Default | Extra |
++--------------------+-------------------+------+-----+---------+-------+
+| car_id             | int               | NO   | PRI | NULL    |       |
+| car_UC             | char(11)          | NO   |     | NULL    |       |
+| brand_company      | varchar(50)       | NO   |     | NULL    |       |
+| product_stock      | varchar(20)       | NO   |     | NULL    |       |
+| car_price          | bigint unsigned   | NO   |     | NULL    |       |
+| car_rating         | decimal(3,2)      | YES  |     | NULL    |       |
+| car_model          | varchar(100)      | YES  |     | NULL    |       |
+| brand_model        | varchar(100)      | NO   |     | NULL    |       |
+| trim               | varchar(100)      | YES  |     | NULL    |       |
+| car_model_year     | smallint unsigned | NO   |     | NULL    |       |
+| first_registration | date              | YES  |     | NULL    |       |
+| mileage            | int unsigned      | NO   |     | NULL    |       |
+| fuel_transmission  | varchar(50)       | YES  |     | NULL    |       |
+| color              | varchar(30)       | YES  |     | NULL    |       |
+| displacement       | int unsigned      | YES  |     | NULL    |       |
+| accident_count     | smallint unsigned | YES  |     | 0       |       |
+| owner_change_count | smallint unsigned | YES  |     | 0       |       |
+| inspection_status  | varchar(30)       | YES  |     | NULL    |       |
+| vehicle_location   | varchar(100)      | YES  |     | NULL    |       |
+| sales_manager      | varchar(100)      | YES  |     | NULL    |       |
+| business_area      | varchar(100)      | YES  |     | NULL    |       |
+| registration_date  | date              | YES  |     | NULL    |       |
+| api_path           | varchar(255)      | YES  |     | NULL    |       |
++--------------------+-------------------+------+-----+---------+-------+
+
 - CAR business key: `base_month + region_code + vehicle_type_code`
 - 동일 business key는 `INSERT`가 아니라 `UPDATE` 또는 변경 없음으로 처리한다.
 
