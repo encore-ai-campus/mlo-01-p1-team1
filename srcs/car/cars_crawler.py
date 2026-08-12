@@ -1,4 +1,5 @@
 import logging
+import sys
 import time
 from pathlib import Path
 
@@ -143,6 +144,7 @@ headers = get_headers()
 url = BASE + "/cars?sort=newest&page=1&page_size=20"
 total_saved = 0
 page = 1
+full_crawl = "--full" in sys.argv
 
 while url and page <= MAX_PAGES:
     response = request_with_retry(
@@ -324,23 +326,25 @@ while url and page <= MAX_PAGES:
             connection_logger,
         )
 
-        # 최신순이므로 현재 페이지가 전부 기존 데이터면 종료
+        # 전체 적재는 끝까지, 5분 주기 신규 적재는 기존 데이터부터 종료
         if car_df.empty:
-            print("새로운 데이터가 없어 수집을 종료합니다.")
-            break
+            if not full_crawl:
+                print("새로운 데이터가 없어 수집을 종료합니다.")
+                break
+            print(f"{page}페이지: 저장할 신규 데이터 없음")
+        else:
+            saved_count = save_to_mysql(
+                car_df,
+                engine,
+                connection_logger,
+                query_logger,
+            )
 
-        saved_count = save_to_mysql(
-            car_df,
-            engine,
-            connection_logger,
-            query_logger,
-        )
+            total_saved += saved_count
 
-        total_saved += saved_count
-
-        print(
-            f"{saved_count}개 신규 데이터 저장 완료"
-        )
+            print(
+                f"{page}페이지: {saved_count}개 신규 데이터 저장 완료"
+            )
 
     # 현재 페이지 저장을 완료한 뒤 다음 페이지로 이동
     next_link = soup.select_one("a[rel='next']")
