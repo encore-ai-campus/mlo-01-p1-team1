@@ -4,8 +4,9 @@
 import requests
 from bs4 import BeautifulSoup
 
+source_url = "http://192.168.0.51:4000/faqs"
 
-response = requests.get("http://192.168.0.51:4000/faqs", timeout=15)
+response = requests.get(source_url, timeout=15)
 soup = BeautifulSoup(response.text, "html.parser")
 faq_item = []
 for faq in soup.select("div.faq-list article.faq-item"):
@@ -19,7 +20,7 @@ for faq in soup.select("div.faq-list article.faq-item"):
 
 
     faq_item.append([question, answer, brand, category, faq_id, source_url, reviewed_at])
-print(faq_item)
+
 
 
 
