@@ -1,25 +1,15 @@
 #!/usr/bin/env python3
 
 import requests
+
 from bs4 import BeautifulSoup
+
 from crawler_logger import get_logger
 from mongo_handler import save_faqs
-import API
-
 logger = get_logger()
 faq_data = []
 
-
-# API 키 자동 조회 및 인증 API 호출
-try:
-    API.run()
-
-except requests.exceptions.RequestException as e:
-    logger.error(f"API 인증 오류: {e}")
-
-
-# FAQ HTML 크롤링
-url = "http://192.168.0.51:4000/faqs"
+url = "http://43.203.233.157/faqs"
 
 try:
     response = requests.get(url, timeout=15)
