@@ -2,17 +2,24 @@
 
 import requests
 from bs4 import BeautifulSoup
-from pymongo import MongoClient
 from crawler_logger import get_logger
-from faq_db import insert_if_new
+from mongo_handler import save_faqs
+import API
 
 logger = get_logger()
+faq_data = []
 
-client = MongoClient("mongodb://10.0.7.119:27017/")
-db = client["crawler"]
-faq_collection = db["faqs"]
 
-url = "http://43.203.233.157/faqs"
+# API 키 자동 조회 및 인증 API 호출
+try:
+    API.run()
+
+except requests.exceptions.RequestException as e:
+    logger.error(f"API 인증 오류: {e}")
+
+
+# FAQ HTML 크롤링
+url = "http://192.168.0.51:4000/faqs"
 
 try:
     response = requests.get(url, timeout=15)
@@ -20,16 +27,28 @@ try:
 
     soup = BeautifulSoup(response.text, "html.parser")
 
+    # FAQ 데이터를 리스트에 수집
     for faq in soup.select("div.faq-list article.faq-item"):
-            insert_if_new(faq_collection, {
-                    "faq_id": faq.get("data-faq-id"),
-                    "brand": faq.select_one('[data-field="brand"]').get_text(strip=True),
-                    "category": faq.get("data-category"),
-                    "question": faq.select_one('[data-field="question"]').get_text(strip=True),
-                    "answer": faq.select_one('[data-field="answer"]').get_text(strip=True),
-                    "source_url": faq.get("data-source-url"),
-                    "reviewed_at": faq.get("data-reviewed-at")
-                })
+        faq_data.append({
+            "question": faq.select_one(
+                '[data-field="question"]'
+            ).get_text(strip=True),
+
+            "answer": faq.select_one(
+                '[data-field="answer"]'
+            ).get_text(strip=True),
+
+            "brand": faq.select_one(
+                '[data-field="brand"]'
+            ).get_text(strip=True),
+
+            "category": faq.get("data-category"),
+            "faq_id": faq.get("data-faq-id"),
+            "source_url": faq.get("data-source-url"),
+        })
+
+    # 수집한 FAQ 데이터를 MongoDB에 저장
+    save_faqs(faq_data)
 
 except requests.exceptions.RequestException as e:
     logger.error(f"FAQ URL: {url} | Error: {e}")
