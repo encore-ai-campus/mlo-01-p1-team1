@@ -37,9 +37,6 @@
     1) 차량 구매 트랜드
 3. B2C 타겟의 서비스 이용 시간 및 비용
 
-### 프로젝트 서비스 구현 기획
- - `구글스프레드시트 링크` https://docs.google.com/spreadsheets/d/1TrqPm2xzha1V_xdKmStusRf3vyEt0CBVXYBCy8NOoa0/edit?usp=sharing
-
 ## 3. 기술 스택
 
 | 구분 | 기술 |
