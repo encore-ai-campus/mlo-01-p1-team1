@@ -26,6 +26,9 @@ logging.basicConfig(
     encoding="utf-8",
 )
 
+# [포트폴리오 1.8] DB 접속정보 분리
+# DB 비밀번호를 소스 코드가 아닌 EC2 내부 파일에서 읽고,
+# pool_pre_ping으로 사용 전 DB 연결 상태를 확인하는 코드입니다.
 db_password = Path("/home/ec2-user/db_password.txt").read_text(
     encoding="utf-8"
 ).strip()
@@ -43,6 +46,9 @@ engine = create_engine(
 )
 
 
+# [포트폴리오 1.7] API 및 네트워크 오류 재시도
+# 연결 실패·시간 초과·요청 제한·서버 오류가 발생했을 때
+# 오류 유형에 맞게 대기한 후 같은 URL을 다시 요청하는 코드입니다.
 def request_with_retry(url, headers=None):
     while True:
         try:
@@ -52,7 +58,9 @@ def request_with_retry(url, headers=None):
                 timeout=10,
             )
 
-            # 자정 이후 API 키가 변경된 경우
+            # [포트폴리오 1.2] 매일 재생성되는 API Key 자동 수집
+            # 기존 Key가 만료되어 403 응답이 오면 새로운 Key로 교체하고
+            # 현재 요청을 다시 실행하는 코드입니다.
             if response.status_code == 403 and headers is not None:
                 headers.clear()
                 headers.update(get_headers())
@@ -118,6 +126,9 @@ def request_with_retry(url, headers=None):
             raise
 
 
+# [포트폴리오 1.2] 매일 재생성되는 API Key 자동 수집
+# 공개 Key 발급 API에서 현재 유효한 Key를 조회하여
+# 모든 차량 API 요청에 사용할 인증 헤더를 만드는 코드입니다.
 def get_headers():
     key_response = request_with_retry(
         BASE + "/api/v1/public-key"
@@ -129,6 +140,9 @@ def get_headers():
     return {"X-API-Key": api_key}
 
 
+# [포트폴리오 1.3] 목록 및 상세 페이지 데이터 수집
+# CSS 선택자로 HTML 요소를 조회하고 텍스트를 반환하며,
+# 요소가 없으면 페이지 구조 변경을 감지할 수 있도록 예외를 발생시킵니다.
 def text_of(node, selector):
     element = node.select_one(selector)
 
@@ -140,6 +154,9 @@ def text_of(node, selector):
     return element.get_text(strip=True)
 
 
+# [포트폴리오 1.1] 초기 전체 데이터 크롤링
+# --full 옵션이면 기존 데이터만 있는 페이지를 만나도 최대 500페이지까지
+# 계속 확인하고, 일반 실행이면 최신 데이터 구간만 확인합니다.
 headers = get_headers()
 url = BASE + "/cars?sort=newest&page=1&page_size=20"
 total_saved = 0
@@ -162,6 +179,9 @@ while url and page <= MAX_PAGES:
 
     page_data = []
 
+    # [포트폴리오 1.3] 목록 및 상세 페이지 데이터 수집
+    # 목록의 차량 카드를 순회하면서 상세 페이지 URL을 만들고,
+    # 각 상세 페이지의 차량 정보 영역을 파싱하는 코드입니다.
     for row in soup.select(
         "div.board-list__body article.board-list__row.car-card"
     ):
@@ -218,6 +238,9 @@ while url and page <= MAX_PAGES:
                     f"{len(car_detail)}개"
                 )
 
+            # [포트폴리오 1.4] 차량 데이터 구조화
+            # 상세 페이지에서 추출한 차량 속성을 컬럼명과 매핑하여
+            # 페이지 단위 DataFrame의 원본 데이터를 구성합니다.
             page_data.append({
                 "brand_company": text_of(
                     car, "a.product-category"
@@ -273,7 +296,8 @@ while url and page <= MAX_PAGES:
     car_df = pd.DataFrame(page_data)
 
     if not car_df.empty:
-        # 단위와 쉼표를 제거한 후 숫자형으로 변환
+        # [포트폴리오 1.5] 숫자 및 날짜 데이터 정제
+        # 숫자형 컬럼의 단위와 구분자를 제거한 뒤 DB 저장용 숫자로 변환합니다.
         numeric_columns = [
             "car_price",
             "car_model_year",
@@ -295,7 +319,8 @@ while url and page <= MAX_PAGES:
                 errors="raise",
             )
 
-        # MySQL DATE 컬럼에 맞게 변환
+        # [포트폴리오 1.5] 숫자 및 날짜 데이터 정제
+        # 문자열 날짜의 구분자를 정리하고 MySQL DATE 컬럼에 맞는 값으로 변환합니다.
         date_columns = [
             "first_registration",
             "registration_date",
@@ -314,19 +339,21 @@ while url and page <= MAX_PAGES:
                 errors="raise",
             ).dt.date
 
-        # 이번 페이지 내부 중복 제거
+        # [포트폴리오 1.6] 15분마다 신규 데이터만 적재
+        # 페이지 내부 중복과 DB에 이미 존재하는 car_id를 제거합니다.
         car_df = car_df.drop_duplicates(
             subset=["car_id"]
         )
 
-        # MySQL에 이미 존재하는 car_id 제거
         car_df = filter_new_cars(
             car_df,
             engine,
             connection_logger,
         )
 
-        # 전체 적재는 끝까지, 5분 주기 신규 적재는 기존 데이터부터 종료
+        # [포트폴리오 1.1 / 1.6] 전체 적재와 정기 증분 적재 분기
+        # --full 모드는 끝까지 순회하고, 15분 주기 일반 모드는
+        # 기존 데이터 구간에 도달하면 조기 종료합니다.
         if car_df.empty:
             if not full_crawl:
                 print("새로운 데이터가 없어 수집을 종료합니다.")
@@ -346,7 +373,8 @@ while url and page <= MAX_PAGES:
                 f"{page}페이지: {saved_count}개 신규 데이터 저장 완료"
             )
 
-    # 현재 페이지 저장을 완료한 뒤 다음 페이지로 이동
+    # [포트폴리오 1.1] 초기 전체 데이터 크롤링
+    # 현재 페이지 저장이 끝난 뒤 next 링크로 다음 페이지를 요청합니다.
     next_link = soup.select_one("a[rel='next']")
 
     url = (

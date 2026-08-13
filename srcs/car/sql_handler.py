@@ -9,16 +9,23 @@ from sqlalchemy.exc import (
 )
 
 
+# [포트폴리오 2.2 - DB 연결 오류 재시도]
+# 일시적인 MySQL 연결 장애로 판단하여 재시도할 오류 코드 목록입니다.
 NETWORK_ERROR_CODES = {2003, 2006, 2013, 2055}
 
 
+# [포트폴리오 2.2 - DB 연결 오류 재시도]
+# SQLAlchemy 예외 내부에서 실제 MySQL 오류 코드를 추출합니다.
 def mysql_error_code(error):
     return getattr(error.orig, "args", [None])[0]
 
 
+# [포트폴리오 2.2 - 신규 차량 필터링]
+# 현재 수집한 car_id 중 DB의 car_data 테이블에 없는 ID만 남겨
+# 중복 차량이 INSERT 대상에 포함되지 않도록 하는 코드입니다.
 def filter_new_cars(
     car_df, # dataframe
-    engine, # 
+    engine, #
     connection_logger,
     max_retries=3,
 ):
@@ -45,6 +52,9 @@ def filter_new_cars(
                 ~car_df["car_id"].astype(str).isin(existing_ids)
             ]
 
+        # [포트폴리오 2.2 - DB 연결 오류 재시도]
+        # 기존 ID 조회 중 연결 장애가 발생하면 로그를 남기고,
+        # 연결 풀을 폐기한 뒤 3초 간격으로 최대 3회 재시도합니다.
         except OperationalError as error:
             code = mysql_error_code(error)
             connection_logger.error(
@@ -62,6 +72,9 @@ def filter_new_cars(
             raise
 
 
+# [포트폴리오 2.2 - 트랜잭션 기반 저장]
+# 신규 차량 DataFrame을 하나의 트랜잭션으로 car_data 테이블에 추가하고,
+# 성공하면 저장 건수를 반환하는 코드입니다.
 def save_to_mysql(
     car_df,
     engine,
@@ -79,6 +92,8 @@ def save_to_mysql(
 
     for attempt in range(1, max_retries + 1):
         try:
+            # [포트폴리오 2.2 - 트랜잭션 기반 저장]
+            # 모두 성공하면 자동 커밋되고 오류가 발생하면 자동 롤백됩니다.
             with engine.begin() as connection:
                 car_df.to_sql(
                     name="car_data",
@@ -88,6 +103,8 @@ def save_to_mysql(
                 )
             return len(car_df)
 
+        # [포트폴리오 2.2 - DB 연결 오류 재시도]
+        # 저장 중 일시적인 연결 장애가 발생하면 연결 풀을 초기화하고 재시도합니다.
         except OperationalError as error:
             code = mysql_error_code(error)
             connection_logger.error(
@@ -104,6 +121,8 @@ def save_to_mysql(
                 continue
             raise
 
+        # [포트폴리오 2.2 - SQL 오류 분류]
+        # PK 중복 코드 1062와 그 밖의 무결성 오류를 구분해 기록합니다.
         except IntegrityError as error:
             code = mysql_error_code(error)
             error_type = "중복 키 오류" if code == 1062 else "무결성 오류"
@@ -116,6 +135,8 @@ def save_to_mysql(
             )
             raise
 
+        # [포트폴리오 2.2 - SQL 오류 분류]
+        # 컬럼 크기 초과나 잘못된 값 등 데이터 형식 오류를 기록합니다.
         except DataError as error:
             code = mysql_error_code(error)
             query_logger.error(
@@ -126,6 +147,8 @@ def save_to_mysql(
             )
             raise
 
+        # [포트폴리오 2.2 - SQL 오류 분류]
+        # 앞에서 분류되지 않은 나머지 SQLAlchemy 오류를 기록합니다.
         except SQLAlchemyError as error:
             query_logger.error(
                 "SQL=%s | 오류 형식=기타 SQL 오류 | %s",
