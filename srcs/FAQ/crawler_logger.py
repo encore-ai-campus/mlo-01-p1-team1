@@ -2,24 +2,42 @@
 
 
 import logging
-import os
 
-LOG_FILE = "/home/ec2-user/logs/request/crawling-error.log"
+
+def make_logger(name, path, level):
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+
+    handler = logging.FileHandler(path)
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(message)s"
+    ))
+    logger.addHandler(handler)
+
+    return logger
+
+
+connection_log = make_logger(
+    "mongo_connection",
+    "/home/ec2-user/logs/sql/sql-connection-error.log",
+    logging.ERROR
+)
+
+query_log = make_logger(
+    "mongo_query",
+    logging.INFO
+)
 
 
 def get_logger():
-    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+    return make_logger(
+        "crawler",
+        "/home/ec2-user/logs/request/crawling-error.log",
+        logging.ERROR
+    )healthy_log = make_logger(
+    "mongo_healthy",
+    "/home/ec2-user/logs/health-check/healthy.log",
+    "/home/ec2-user/logs/sql/sql-query-error.log",
+)
 
-    logger = logging.getLogger("crawler")
 
-    if not logger.handlers:
-        logger.setLevel(logging.ERROR)
-
-        file_handler = logging.FileHandler(LOG_FILE)
-        file_handler.setFormatter(
-            logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
-        )
-
-        logger.addHandler(file_handler)
-
-    return logger
