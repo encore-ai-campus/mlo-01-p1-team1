@@ -421,3 +421,9 @@ sudo logrotate -f /etc/logrotate.d/faq-pipeline
 - 실제 credential·private endpoint·개인정보는 PRD와 evidence에 기록하지 않는다.
 
 ## 12. ADD 구현준비
+| 직업 | 작업 | 예비 | 결과 |
+|---|---|---|---|
+| 검수 | 테스트·증빙 | 정상·실패·중복·재실행 시나리오의 검증 가능성 검토 | 가능 — 테스트 데이터와 Evidence 기준 정의 필요 |
+| 기획 정합성 |	AWS 배치 | PRD v5의 단일 EC2 기준과 Private subnet1·2 EC2 배치 문구의 일치 여부를 검토한다. | 상위 범위·AC·구현순서는 단일 EC2/Private subnet1이지만 catalog·cron 일부는 두 EC2로 표현되어 충돌한다. |
+| 기획 정합성 |	접근·보안 | SSM·.pem·SSH inbound 요구와 Public inbound 금지 AC의 일치 여부를 검토한다. | SSM only와 .pem/SSH 허용 범위가 PRD 내에서 불일치한다. |
+| 고가용성·복구 | 마스터·대기 전환 | 마스터 장애 시 대기 서버 승격과 복구 서버의 standby 재편입 가능성을 검토한다. | 조건부 가능 — DB native replication·fencing·leader lock이 필요하며 Google Drive는 cold backup으로 한정한다. |
