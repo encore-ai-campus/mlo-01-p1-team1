@@ -38,10 +38,13 @@ EC2는 private subnet에 배치하고 SSM, `.pem`으로 관리하며, cron으로
 ### 2.1 담당자별 역할 분담
 | 역할 ID | 역할 | 담당 범위 | 실제 담당자 | 검토자 |
 |---|---|---|---|---|
-| `STK-PIPE-OPS-001` | AWS·자동화 담당자 | VPC·subnet·IGW·NAT·route·SG·단일 EC2·Docker Compose·SSM·cron·로그·logrotate | `<이름 입력>` | `STK-DQ-REV-001` |
-| `STK-CAR-DATA-001` | CAR 데이터 담당자 | CAR 수집·파싱·정제·품질검사·MySQL 적재 | `<이름 입력>` | `STK-DQ-REV-001` |
-| `STK-FAQ-DATA-001` | FAQ 데이터 담당자 | FAQ 수집·파싱·정제·품질검사·MongoDB 적재 | `<이름 입력>` | `STK-DQ-REV-001` |
-| `STK-DQ-REV-001` | 품질·통합 검토자 | 데이터 계약·처리 건수·중복·실패 로그·evidence·보안 검토 | `<이름 입력>` | 나머지 팀원 1명 이상 |
+| `STK-PIPE-OPS-001` | AWS·자동화 담당자 | VPC·subnet·IGW·NAT·route·SG·단일 EC2·Docker Compose·SSM·cron·로그·logrotate | `신동엽` | `STK-DQ-REV-001` |
+| `STK-CAR-DATA-001` | CAR 데이터 담당자 | CAR 수집·파싱·정제·품질검사·MySQL 적재 | `이형인` | `STK-DQ-REV-001` |
+| `STK-FAQ-DATA-001` | FAQ 데이터 담당자 | FAQ 수집·파싱·정제·품질검사·MongoDB 적재 | `조성현` | `STK-DQ-REV-001` |
+| `STK-DQ-REV-001` | 품질·통합 검토자 | 데이터 계약·처리 건수·중복·실패 로그·evidence·보안 검토 | `신동엽, 김건우` | 나머지 팀원 1명 이상 |
+| `STK-BKP-OPS-001` | 백업/적재 운영자 | LOAD_PASS 백업·로그/DQ 생성·run_id별 보관·품질검사 | `김건우` | `STK-DQ-REV-001` |
+
+
 
 ### 2.2 서비스 흐름
 
@@ -84,6 +87,7 @@ EC2는 private subnet에 배치하고 SSM, `.pem`으로 관리하며, cron으로
 | `faq-worker` | internal network | FAQ 수집·정제·품질검사 | `STK-FAQ-DATA-001` |
 | `mysql` | internal network | CAR 정본 저장소 | `STK-CAR-DATA-001` |
 | `mongodb` | internal network | FAQ 정본 저장소 | `STK-FAQ-DATA-001` |
+| `google-cloud` | internal network | 백업용 데이터 저장소 | `STK-BKP-OPS-001` |
 
 권장 디렉터리를 분리하여 저정한다.
 
@@ -124,29 +128,29 @@ EC2는 private subnet에 배치하고 SSM, `.pem`으로 관리하며, cron으로
 |---|---|---|---|---|---|---|
 | `FR-AWS-VPC-001` | pass | 지정 CIDR로 VPC와 public·private subnet 각 2개를 생성한다. | `BR-OBJ-003` | `AC-AWS-NET-001` | `STK-PIPE-OPS-001` | Day 1 |
 | `FR-AWS-EGRESS-001` | pass | IGW와 Public subnet1의 단일 NAT Gateway를 구성한다. | `BR-OBJ-003` | `AC-AWS-NET-001` | `STK-PIPE-OPS-001` | Day 1 |
-| `FR-AWS-ROUTE-001` | planned | public route와 private1, 2 route를 요구된 public subnet에 연결한다. | `BR-OBJ-003` | `AC-AWS-ROUTE-001` | `STK-PIPE-OPS-001` | Day 1 |
-| `FR-AWS-EC2-001` | planned | Private subnet1, 2에 pipeline EC2를 생성한다. | `BR-OBJ-003` | `AC-AWS-EC2-001` | `STK-PIPE-OPS-001` | Day 1 |
-| `FR-COMPOSE-001` | planned | private subnet1, 2의 EC2에서 car-worker·faq-worker·mysql·mongodb 서비스를 분리한다. | `BR-OBJ-003` | `AC-COMPOSE-001` | `STK-PIPE-OPS-001` | Day 1 |
-| `NFR-AWS-ACCESS-001` | planned | EC2에 Public IP를 두지않고, mongodb, mysql port 및 ssh 연결을 제외한 inbound를 두지 않고 관리한다. | `BR-OBJ-004` | `AC-AWS-SG-001` | `STK-PIPE-OPS-001` | Day 1 |
-| `FR-CAR-COLLECT-001` | planned | 승인된 CAR URL에 timeout을 적용해 요청하고 응답 성공 여부를 기록한다. | `BR-OBJ-001` | `AC-CAR-COLLECT-001` | `STK-CAR-DATA-001` | Day 1 |
-| `FR-CAR-PARSE-001` | planned | BeautifulSoup4로 CAR 대상 영역을 파싱하고 `필요한 필드를 추출`한다. | `BR-OBJ-001` | `AC-CAR-TRANSFORM-001` | `STK-CAR-DATA-001` | Day 1 |
-| `FR-CAR-FRAME-001` | planned | CAR 추출 결과를 정의된 컬럼과 타입의 DataFrame으로 변환한다. | `BR-OBJ-001` | `AC-CAR-TRANSFORM-001` | `STK-CAR-DATA-001` | Day 1 |
-| `FR-CAR-CLEAN-001` | planned | 기준월·지역·차종·등록대수를 표준화하고 원본 값과 정제 값을 추적한다. | `BR-OBJ-001` | `AC-CAR-QUALITY-001` | `STK-CAR-DATA-001` | Day 1 |
-| `DR-CAR-001` | planned | CAR 결측·중복·형식·비음수·처리 건수 대사를 검사한다. | `BR-OBJ-001`·`BR-OBJ-004` | `AC-CAR-QUALITY-001` | `STK-CAR-DATA-001` | Day 1 |
-| `FR-CAR-LOAD-001` | planned | 품질검사를 통과한 CAR 데이터를 business key 기준으로 MySQL에 upsert한다. | `BR-OBJ-001` | `AC-CAR-LOAD-001` | `STK-CAR-DATA-001` | Day 1 |
-| `FR-FAQ-COLLECT-001` | planned | 승인된 FAQ URL에 timeout을 적용해 요청하고 응답 성공 여부를 기록한다. | `BR-OBJ-002` | `AC-FAQ-COLLECT-001` | `STK-FAQ-DATA-001` | Day 1 |
-| `FR-FAQ-PARSE-001` | planned | BeautifulSoup4로 FAQ 대상 영역을 파싱하고 필요한 필드를 추출한다. | `BR-OBJ-002` | `AC-FAQ-TRANSFORM-001` | `STK-FAQ-DATA-001` | Day 1 |
-| `FR-FAQ-FRAME-001` | planned | FAQ 추출 결과를 정의된 컬럼과 타입의 DataFrame으로 변환한다. | `BR-OBJ-002` | `AC-FAQ-TRANSFORM-001` | `STK-FAQ-DATA-001` | Day 1 |
-| `FR-FAQ-CLEAN-001` | planned | 회사·카테고리·질문·답변·URL을 표준화하고 원본 값과 정제 값을 추적한다. | `BR-OBJ-002` | `AC-FAQ-QUALITY-001` | `STK-FAQ-DATA-001` | Day 1 |
-| `DR-FAQ-001` | planned | FAQ 결측·중복·빈 내용·URL 형식·처리 건수 대사를 검사한다. | `BR-OBJ-002`·`BR-OBJ-004` | `AC-FAQ-QUALITY-001` | `STK-FAQ-DATA-001` | Day 1 |
-| `FR-FAQ-LOAD-001` | planned | 품질검사를 통과한 FAQ를 고유 식별키 기준으로 MongoDB에 upsert한다. | `BR-OBJ-002` | `AC-FAQ-LOAD-001` | `STK-FAQ-DATA-001` | Day 1 |
+| `FR-AWS-ROUTE-001` | pass | public route와 private1, 2 route를 요구된 public subnet에 연결한다. | `BR-OBJ-003` | `AC-AWS-ROUTE-001` | `STK-PIPE-OPS-001` | Day 1 |
+| `FR-AWS-EC2-001` | pass | Private subnet1, 2에 pipeline EC2를 생성한다. | `BR-OBJ-003` | `AC-AWS-EC2-001` | `STK-PIPE-OPS-001` | Day 1 |
+| `FR-COMPOSE-001` | pass | private subnet1, 2의 EC2에서 car-worker·faq-worker·mysql·mongodb 서비스를 분리한다. | `BR-OBJ-003` | `AC-COMPOSE-001` | `STK-PIPE-OPS-001` | Day 1 |
+| `NFR-AWS-ACCESS-001` | pass | EC2에 Public IP를 두지않고, mongodb, mysql port 및 ssh 연결을 제외한 inbound를 두지 않고 관리한다. | `BR-OBJ-004` | `AC-AWS-SG-001` | `STK-PIPE-OPS-001` | Day 1 |
+| `FR-CAR-COLLECT-001` | pass | 승인된 CAR URL에 timeout을 적용해 요청하고 응답 성공 여부를 기록한다. | `BR-OBJ-001` | `AC-CAR-COLLECT-001` | `STK-CAR-DATA-001` | Day 1 |
+| `FR-CAR-PARSE-001` | pass | BeautifulSoup4로 CAR 대상 영역을 파싱하고 `필요한 필드를 추출`한다. | `BR-OBJ-001` | `AC-CAR-TRANSFORM-001` | `STK-CAR-DATA-001` | Day 1 |
+| `FR-CAR-FRAME-001` | pass | CAR 추출 결과를 정의된 컬럼과 타입의 DataFrame으로 변환한다. | `BR-OBJ-001` | `AC-CAR-TRANSFORM-001` | `STK-CAR-DATA-001` | Day 1 |
+| `FR-CAR-CLEAN-001` | pass | 기준월·지역·차종·등록대수를 표준화하고 원본 값과 정제 값을 추적한다. | `BR-OBJ-001` | `AC-CAR-QUALITY-001` | `STK-CAR-DATA-001` | Day 1 |
+| `DR-CAR-001` | pass | CAR 결측·중복·형식·비음수·처리 건수 대사를 검사한다. | `BR-OBJ-001`·`BR-OBJ-004` | `AC-CAR-QUALITY-001` | `STK-CAR-DATA-001` | Day 1 |
+| `FR-CAR-LOAD-001` | pass | 품질검사를 통과한 CAR 데이터를 business key 기준으로 MySQL에 upsert한다. | `BR-OBJ-001` | `AC-CAR-LOAD-001` | `STK-CAR-DATA-001` | Day 1 |
+| `FR-FAQ-COLLECT-001` | pass | 승인된 FAQ URL에 timeout을 적용해 요청하고 응답 성공 여부를 기록한다. | `BR-OBJ-002` | `AC-FAQ-COLLECT-001` | `STK-FAQ-DATA-001` | Day 1 |
+| `FR-FAQ-PARSE-001` | pass | BeautifulSoup4로 FAQ 대상 영역을 파싱하고 필요한 필드를 추출한다. | `BR-OBJ-002` | `AC-FAQ-TRANSFORM-001` | `STK-FAQ-DATA-001` | Day 1 |
+| `FR-FAQ-FRAME-001` | pass | FAQ 추출 결과를 정의된 컬럼과 타입의 DataFrame으로 변환한다. | `BR-OBJ-002` | `AC-FAQ-TRANSFORM-001` | `STK-FAQ-DATA-001` | Day 1 |
+| `FR-FAQ-CLEAN-001` | pass | 회사·카테고리·질문·답변·URL을 표준화하고 원본 값과 정제 값을 추적한다. | `BR-OBJ-002` | `AC-FAQ-QUALITY-001` | `STK-FAQ-DATA-001` | Day 1 |
+| `DR-FAQ-001` | pass | FAQ 결측·중복·빈 내용·URL 형식·처리 건수 대사를 검사한다. | `BR-OBJ-002`·`BR-OBJ-004` | `AC-FAQ-QUALITY-001` | `STK-FAQ-DATA-001` | Day 1 |
+| `FR-FAQ-LOAD-001` | pass | 품질검사를 통과한 FAQ를 고유 식별키 기준으로 MongoDB에 upsert한다. | `BR-OBJ-002` | `AC-FAQ-LOAD-001` | `STK-FAQ-DATA-001` | Day 1 |
 | `FR-CRON-CAR-001` | pass | CAR pipeline cron entry를 private subnet1 EC2에 등록한다. | `BR-OBJ-003` | `AC-CRON-001` | `STK-PIPE-OPS-001` | Day 2 |
 | `FR-CRON-FAQ-001` | pass | FAQ pipeline cron entry를 private subnet2 EC2에 등록한다. | `BR-OBJ-003` | `AC-CRON-001` | `STK-PIPE-OPS-001` | Day 2 |
-| `FR-LOG-001` | planned | 수집·정제·적재 단계별 시작·성공·실패·처리 건수 로그를 파일로 기록한다. | `BR-OBJ-003`·`BR-OBJ-004` | `AC-LOG-001` | `STK-PIPE-OPS-001` | Day 2 |
-| `FR-SYSTEM-METRIC-001` | planned | CPU·memory·disk 사용량을 주기적으로 파일 로그에 기록한다. | `BR-OBJ-003` | `AC-SYSTEM-METRIC-001` | `STK-PIPE-OPS-001` | Day 2 |
-| `FR-LOGROTATE-001` | planned | crawler·transform·loader·system metric 로그에 logrotate 정책을 적용한다. | `BR-OBJ-003` | `AC-LOGROTATE-001` | `STK-PIPE-OPS-001` | Day 2 |
-| `NFR-IDEMP-001` | planned | 동일 입력을 재실행해도 MySQL row와 MongoDB document가 중복 증가하지 않는다. | `BR-OBJ-003` | `AC-IDEMP-001` | `STK-DQ-REV-001` | Day 2 |
-| `NFR-SECRET-001` | planned | DB 비밀번호·API key·private endpoint를 코드·Git·로그에 기록하지 않는다. | `BR-OBJ-004` | `AC-SECRET-001` | `STK-DQ-REV-001` | Day 2 |
+| `FR-LOG-001` | pass | 수집·정제·적재 단계별 시작·성공·실패·처리 건수 로그를 파일로 기록한다. | `BR-OBJ-003`·`BR-OBJ-004` | `AC-LOG-001` | `STK-PIPE-OPS-001` | Day 2 |
+| `FR-SYSTEM-METRIC-001` | pass | CPU·memory·disk 사용량을 주기적으로 파일 로그에 기록한다. | `BR-OBJ-003` | `AC-SYSTEM-METRIC-001` | `STK-PIPE-OPS-001` | Day 2 |
+| `FR-LOGROTATE-001` | pass | crawler·transform·loader·system metric 로그에 logrotate 정책을 적용한다. | `BR-OBJ-003` | `AC-LOGROTATE-001` | `STK-PIPE-OPS-001` | Day 2 |
+| `NFR-IDEMP-001` | pass | 동일 입력을 재실행해도 MySQL row와 MongoDB document가 중복 증가하지 않는다. | `BR-OBJ-003` | `AC-IDEMP-001` | `STK-DQ-REV-001` | Day 2 |
+| `NFR-SECRET-001` | pass | DB 비밀번호·API key·private endpoint를 코드·Git·로그에 기록하지 않는다. | `BR-OBJ-004` | `AC-SECRET-001` | `STK-DQ-REV-001` | Day 2 |
 
 ### 4.2 적재 이후 로그·데이터 백업 및 Google Drive 보조 저장소 기획
 
@@ -154,15 +158,15 @@ EC2는 private subnet에 배치하고 SSM, `.pem`으로 관리하며, cron으로
 
 | ID | 상태 | 요구사항 | BRD 목표 | owner | due |
 |---|---|---|---|---|---|
-| `ADD1-REQ-001` | planned | 모든 실행에 고유 run_id를 발급하고 DB 적재 결과·로그·백업·manifest에 동일하게 기록한다. | `ADD1-BR-001` | `STK-PIPE-OPS-001` | Day 2 |
-| `ADD1-REQ-002` | planned | 데이터 백업은 LOAD_PASS일 때만 생성하고 로그·DQ 결과는 모든 종료 상태에서 생성한다. | `ADD1-BR-002` | `STK-PIPE-OPS-001` | Day 2 |
-| `ADD1-REQ-003` | planned | MySQL에 적재된 CAR 결과를 논리 백업 파일 CSV.gz로 생성한다. | `ADD1-BR-001` | `STK-CAR-DATA-001` | Day 2 |
-| `ADD1-REQ-004` | planned | MongoDB에 적재된 FAQ 결과를 논리 백업 파일 JSON.gz로 생성한다. | `ADD1-BR-001` | `STK-CAR-DATA-001` | Day 2 |
-| `ADD1-REQ-005` | planned | 실행 로그·오류 로그·DQ 결과·manifest를 run_id 단위로 묶어 보관한다. | `ADD1-BR-004` | `STK-PIPE-OPS-001` | Day 2 |
-| `ADD1-REQ-006` | planned | 환경·파이프라인·날짜·run_id 폴더 규칙으로 백업 패키지를 업로드한다. | `ADD1-BR-004` | `STK-PIPE-OPS-001` | Day 2 |
-| `ADD1-REQ-007` | planned | 업로드 전후 파일 크기와 SHA-256 checksum을 검증한다. | `ADD1-BR-006` | `STK-DQ-REV-001` | Day 2 |
-| `ADD1-REQ-008` | planned | Drive 업로드 실패 시 제한된 횟수로 재시도하고 동일 run_id 중복 파일을 만들지 않는다. | `ADD1-BR-003`·`ADD1-BR-004` | `STK-PIPE-OPS-001` | Day 2 |
-| `ADD1-REQ-009` | planned | 백업 계정은 지정 폴더에만 접근하며 credential·private endpoint는 로그와 파일에 기록하지 않는다. | `ADD1-BR-005` | `STK-DQ-REV-001` | Day 2 |
+| `ADD1-REQ-001` | pass | 모든 실행에 고유 run_id를 발급하고 DB 적재 결과·로그·백업·manifest에 동일하게 기록한다. | `ADD1-BR-001` | `STK-PIPE-OPS-001` | Day 2 |
+| `ADD1-REQ-002` | pass | 데이터 백업은 LOAD_PASS일 때만 생성하고 로그·DQ 결과는 모든 종료 상태에서 생성한다. | `ADD1-BR-002` | `STK-PIPE-OPS-001` | Day 2 |
+| `ADD1-REQ-003` | pass | MySQL에 적재된 CAR 결과를 논리 백업 파일 CSV.gz로 생성한다. | `ADD1-BR-001` | `STK-CAR-DATA-001` | Day 2 |
+| `ADD1-REQ-004` | in_progress | MongoDB에 적재된 FAQ 결과를 논리 백업 파일 JSON.gz로 생성한다. | `ADD1-BR-001` | `STK-CAR-DATA-001` | Day 2 |
+| `ADD1-REQ-005` | pass | 실행 로그·오류 로그·DQ 결과·manifest를 run_id 단위로 묶어 보관한다. | `ADD1-BR-004` | `STK-PIPE-OPS-001` | Day 2 |
+| `ADD1-REQ-006` | pass | 환경·파이프라인·날짜·run_id 폴더 규칙으로 백업 패키지를 업로드한다. | `ADD1-BR-004` | `STK-PIPE-OPS-001` | Day 2 |
+| `ADD1-REQ-007` | pass | 업로드 전후 파일 크기와 SHA-256 checksum을 검증한다. | `ADD1-BR-006` | `STK-DQ-REV-001` | Day 2 |
+| `ADD1-REQ-008` | pass | Drive 업로드 실패 시 제한된 횟수로 재시도하고 동일 run_id 중복 파일을 만들지 않는다. | `ADD1-BR-003`·`ADD1-BR-004` | `STK-PIPE-OPS-001` | Day 2 |
+| `ADD1-REQ-009` | pass | 백업 계정은 지정 폴더에만 접근하며 credential·private endpoint는 로그와 파일에 기록하지 않는다. | `ADD1-BR-005` | `STK-DQ-REV-001` | Day 2 |
 | `ADD1-REQ-010` | planned | CAR·FAQ 백업 표본을 복구하고 최종 업로드 실패 시 담당자 이메일 알림을 남긴다. | `ADD1-BR-001`·`ADD1-BR-003` | `STK-DQ-REV-001` | Day 2 |
 
 
@@ -174,30 +178,30 @@ EC2는 private subnet에 배치하고 SSM, `.pem`으로 관리하며, cron으로
 
 권장 table명: `car_data`
 
-| 필드                | 타입 예시          | 필수 | PK   |
+| 필드 | 타입 예시 | 필수 | PK |
 |---|---|---|---|
 | car_id             | int               |  Y  | PRI |
-| car_UC             | char(11)          |  N  |     |
-| brand_company      | varchar(50)       |  Y  |     |
-| product_stock      | varchar(20)       |  Y  |     |
-| car_price          | bigint unsigned   |  Y  |     |
-| car_rating         | decimal(3,2)      |  N  |     |
-| car_model          | varchar(100)      |  N  |     |
-| brand_model        | varchar(100)      |  Y  |     |
-| trim               | varchar(100)      |  N  |     |
-| car_model_year     | smallint unsigned |  Y  |     |
-| first_registration | date              |  N  |     |
-| mileage            | int unsigned      |  Y  |     |
-| color              | varchar(30)       |  N  |     |
-| displacement       | int unsigned      |  N  |     |
-| accident_count     | smallint unsigned |  Y  |     |
-| owner_change_count | smallint unsigned |  N  |     |
-| inspection_status  | varchar(30)       |  N  |     |
-| vehicle_location   | varchar(100)      |  Y  |     |
-| sales_manager      | varchar(100)      |  N  |     |
-| business_area      | varchar(100)      |  N  |     |
-| registration_date  | date              |  N  |     |
-| api_path           | varchar(255)      |  N  |     |
+| car_UC             | char(11)          |  N  |  -  |
+| brand_company      | varchar(50)       |  Y  |  -  |
+| product_stock      | varchar(20)       |  Y  |  -  |
+| car_price          | bigint unsigned   |  Y  |  -  |
+| car_rating         | decimal(3,2)      |  N  |  -  |
+| car_model          | varchar(100)      |  N  |  -  |
+| brand_model        | varchar(100)      |  Y  |  -  |
+| trim               | varchar(100)      |  N  |  -  |
+| car_model_year     | smallint unsigned |  Y  |  -  |
+| first_registration | date              |  N  |  -  |
+| mileage            | int unsigned      |  Y  |  -  |
+| color              | varchar(30)       |  N  |  -  |
+| displacement       | int unsigned      |  N  |  -  |
+| accident_count     | smallint unsigned |  Y  |  -  |
+| owner_change_count | smallint unsigned |  N  |  -  |
+| inspection_status  | varchar(30)       |  N  |  -  |
+| vehicle_location   | varchar(100)      |  Y  |  -  |
+| sales_manager      | varchar(100)      |  N  |  -  |
+| business_area      | varchar(100)      |  N  |  -  |
+| registration_date  | date              |  N  |  -  |
+| api_path           | varchar(255)      |  N  |  -  |
 
 - CAR Primary Key: `car_id`
 
@@ -205,15 +209,16 @@ EC2는 private subnet에 배치하고 SSM, `.pem`으로 관리하며, cron으로
 
 권장 collection명: `faqs`
 
-| 필드 | 타입 예시 | 필수 |
+| 필드 | 타입 예시 | 필수 | PK |
 |---|---|---|---|
-| _id                | objectId          | Y |     
-| question           | string            | Y |     
-| answer             | string            | Y |     
-| brand              | string            | Y |     
-| category           | string            | Y |     
-| faq_id             | string            | Y |     
-| source_url         | string            | Y |     
+| _id                | objectId          | Y | PRI |  
+| question           | string            | Y |  -  |
+| answer             | string            | Y |  -  |     
+| brand              | string            | Y |  -  |     
+| category           | string            | Y |  -  |            
+| faq_id             | string            | Y |  -  |     
+| source_url         | string            | Y |  -  |
+| reviewed_at        | int               | N |  -  |        
 
 - FAQ 고유 식별키: `_id`
 - 동일 식별키의 내용이 같으면 중복 추가하지 않고, `content_hash`가 다르면 갱신한다.
@@ -322,25 +327,25 @@ sudo logrotate -f /etc/logrotate.d/faq-pipeline
 
 | AC ID | Given | When | Then | Evidence | 상태 |
 |---|---|---|---|---|---|
-| `AC-AWS-NET-001` | 빈 AWS 프로젝트 환경 | VPC·subnet·IGW·NAT 생성 | CIDR이 설계와 일치하고 NAT가 Public subnet1에서 Available | `evidence/aws-network.md` | planned |
-| `AC-AWS-ROUTE-001` | 생성된 IGW·NAT·subnet | route table 연결 | public은 IGW, private1·2는 NAT로 outbound 연결 | `evidence/aws-network.md` | planned |
-| `AC-AWS-EC2-001` | network 생성 완료 | 단일 EC2 생성 | EC2가 Private subnet1에 Public IP 없이 배치되고 SSM 접속 가능 | `evidence/aws-ec2.md` | planned |
-| `AC-COMPOSE-001` | Docker가 설치된 단일 EC2 | `docker compose up` 실행 | car-worker·faq-worker·mysql·mongodb가 분리된 서비스와 volume으로 실행 | `evidence/docker-compose.md` | planned |
-| `AC-AWS-SG-001` | EC2와 SG 생성 완료 | 접근·포트 검사 | Public inbound가 없고 3306·27017이 외부에 노출되지 않음 | `evidence/aws-security-group.md` | planned |
-| `AC-CAR-COLLECT-001` | 정상 URL과 존재하지 않는 URL | CAR collector 실행 | 정상 응답은 raw로 처리되고 실패 URL은 crawler log에 기록되며 load되지 않음 | `evidence/car-pipeline.md` | planned |
-| `AC-CAR-TRANSFORM-001` | 정상·필수값 누락 CAR fixture | parse·DataFrame 변환 | 정상 필드가 계약과 일치하고 누락 행이 별도 식별 | `evidence/car-pipeline.md` | planned |
-| `AC-CAR-QUALITY-001` | 결측·중복·음수·형식 오류 CAR fixture | clean·quality 실행 | 오류가 분류되고 원본 건수 = 정상 후보 + 오류 건수 | `output/<run_id>/car-quality-report.json` | planned |
-| `AC-CAR-LOAD-001` | 유효 CAR 데이터 | MySQL load 실행 | business key 중복 0건, 유효 후보와 DB 대상 건수 차이 0건 | `evidence/mysql-verification.md` | planned |
-| `AC-FAQ-COLLECT-001` | 정상 URL과 존재하지 않는 URL | FAQ collector 실행 | 정상 응답은 raw로 처리되고 실패 URL은 crawler log에 기록되며 load되지 않음 | `evidence/faq-pipeline.md` | planned |
-| `AC-FAQ-TRANSFORM-001` | 정상·필수값 누락 FAQ fixture | parse·DataFrame 변환 | 정상 필드가 계약과 일치하고 누락 document가 별도 식별 | `evidence/faq-pipeline.md` | planned |
-| `AC-FAQ-QUALITY-001` | 결측·중복·빈 질문·빈 답변 fixture | clean·quality 실행 | 오류가 분류되고 원본 건수 = 정상 후보 + 오류 건수 | `output/<run_id>/faq-quality-report.json` | planned |
-| `AC-FAQ-LOAD-001` | 유효 FAQ 데이터 | MongoDB load 실행 | 고유 식별키 중복 0건, 유효 후보와 collection 대상 건수 차이 0건 | `evidence/mongodb-verification.md` | planned |
-| `AC-CRON-001` | 수동 실행 성공 | 단일 EC2에 cron 등록 후 목록 검사 | CAR·FAQ pipeline cron entry가 각각 정확히 1개 | `evidence/cron-logrotate.md` | planned |
-| `AC-LOG-001` | 성공·실패 fixture | 각 pipeline 실행 | 수집·정제·적재 로그에서 단계·상태·건수·정제 오류 확인 | `evidence/cron-logrotate.md` | planned |
-| `AC-SYSTEM-METRIC-001` | metric script와 cron | CPU·memory·disk 로그 생성 | 세 지표와 측정 시각이 system-metrics.log에 기록 | `evidence/system-metrics.md` | planned |
-| `AC-LOGROTATE-001` | 회전 대상 로그 | logrotate dry run과 강제 회전 | 설정 오류가 없고 회전 파일 생성 후 새 로그 기록 가능 | `evidence/cron-logrotate.md` | planned |
-| `AC-IDEMP-001` | 동일한 CAR·FAQ 입력 | 각 pipeline을 2회 실행 | 두 번째 실행 후 MySQL·MongoDB business record 수가 중복 증가하지 않음 | `evidence/idempotency.md` | planned |
-| `AC-SECRET-001` | 코드·설정·로그 제출 후보 | 민감정보 검사 | credential·private endpoint·개인정보 의심 항목 0건 | `evidence/security-review.md` | planned |
+| `AC-AWS-NET-001` | 빈 AWS 프로젝트 환경 | VPC·subnet·IGW·NAT 생성 | CIDR이 설계와 일치하고 NAT가 Public subnet1에서 Available | `evidence/aws-network.md` | pass |
+| `AC-AWS-ROUTE-001` | 생성된 IGW·NAT·subnet | route table 연결 | public은 IGW, private1·2는 NAT로 outbound 연결 | `evidence/aws-network.md` | pass |
+| `AC-AWS-EC2-001` | network 생성 완료 | 단일 EC2 생성 | EC2가 Private subnet1에 Public IP 없이 배치되고 SSM 접속 가능 | `evidence/aws-ec2.md` | pass |
+| `AC-COMPOSE-001` | Docker가 설치된 단일 EC2 | `docker compose up` 실행 | car-worker·faq-worker·mysql·mongodb가 분리된 서비스와 volume으로 실행 | `evidence/docker-compose.md` | pass |
+| `AC-AWS-SG-001` | EC2와 SG 생성 완료 | 접근·포트 검사 | Public inbound가 없고 3306·27017이 외부에 노출되지 않음 | `evidence/aws-security-group.md` | pass |
+| `AC-CAR-COLLECT-001` | 정상 URL과 존재하지 않는 URL | CAR collector 실행 | 정상 응답은 raw로 처리되고 실패 URL은 crawler log에 기록되며 load되지 않음 | `evidence/car-pipeline.md` | pass |
+| `AC-CAR-TRANSFORM-001` | 정상·필수값 누락 CAR fixture | parse·DataFrame 변환 | 정상 필드가 계약과 일치하고 누락 행이 별도 식별 | `evidence/car-pipeline.md` | pass |
+| `AC-CAR-QUALITY-001` | 결측·중복·음수·형식 오류 CAR fixture | clean·quality 실행 | 오류가 분류되고 원본 건수 = 정상 후보 + 오류 건수 | `output/<run_id>/car-quality-report.json` | pass |
+| `AC-CAR-LOAD-001` | 유효 CAR 데이터 | MySQL load 실행 | business key 중복 0건, 유효 후보와 DB 대상 건수 차이 0건 | `evidence/mysql-verification.md` | pass |
+| `AC-FAQ-COLLECT-001` | 정상 URL과 존재하지 않는 URL | FAQ collector 실행 | 정상 응답은 raw로 처리되고 실패 URL은 crawler log에 기록되며 load되지 않음 | `evidence/faq-pipeline.md` | pass |
+| `AC-FAQ-TRANSFORM-001` | 정상·필수값 누락 FAQ fixture | parse·DataFrame 변환 | 정상 필드가 계약과 일치하고 누락 document가 별도 식별 | `evidence/faq-pipeline.md` | pass |
+| `AC-FAQ-QUALITY-001` | 결측·중복·빈 질문·빈 답변 fixture | clean·quality 실행 | 오류가 분류되고 원본 건수 = 정상 후보 + 오류 건수 | `output/<run_id>/faq-quality-report.json` | pass |
+| `AC-FAQ-LOAD-001` | 유효 FAQ 데이터 | MongoDB load 실행 | 고유 식별키 중복 0건, 유효 후보와 collection 대상 건수 차이 0건 | `evidence/mongodb-verification.md` | pass |
+| `AC-CRON-001` | 수동 실행 성공 | 단일 EC2에 cron 등록 후 목록 검사 | CAR·FAQ pipeline cron entry가 각각 정확히 1개 | `evidence/cron-logrotate.md` | pass |
+| `AC-LOG-001` | 성공·실패 fixture | 각 pipeline 실행 | 수집·정제·적재 로그에서 단계·상태·건수·정제 오류 확인 | `evidence/cron-logrotate.md` | pass |
+| `AC-SYSTEM-METRIC-001` | metric script와 cron | CPU·memory·disk 로그 생성 | 세 지표와 측정 시각이 system-metrics.log에 기록 | `evidence/system-metrics.md` | pass |
+| `AC-LOGROTATE-001` | 회전 대상 로그 | logrotate dry run과 강제 회전 | 설정 오류가 없고 회전 파일 생성 후 새 로그 기록 가능 | `evidence/cron-logrotate.md` | pass |
+| `AC-IDEMP-001` | 동일한 CAR·FAQ 입력 | 각 pipeline을 2회 실행 | 두 번째 실행 후 MySQL·MongoDB business record 수가 중복 증가하지 않음 | `evidence/idempotency.md` | pass |
+| `AC-SECRET-001` | 코드·설정·로그 제출 후보 | 민감정보 검사 | credential·private endpoint·개인정보 의심 항목 0건 | `evidence/security-review.md` | pass |
 
 ## 9. 담당자별 구현 체크리스트
 
@@ -395,6 +400,19 @@ sudo logrotate -f /etc/logrotate.d/faq-pipeline
 - [ ] credential·private endpoint·개인정보 노출 0건 확인
 - [ ] evidence가 없는 항목을 PASS로 표시하지 않았는지 확인
 
+
+### 9.5 백업용 Drive 담당자
+
+- [ ] manifest와 로그의 run_id 확인
+- [ ] 성공·실패 fixture 실행 결과 확인
+- [ ] 압축 해제 후 스키마·건수 확인
+- [ ] 압축 해제 후 필드·문서 수 확인
+- [ ] 정상·오류 로그 필수 필드 확인
+- [ ] 원격 파일 조회 및 receipt 확인
+- [ ] checksum 재계산 확인
+- [ ] 동일 run_id 2회 실행·실패 확인
+- [ ] secret scan·권환 확인
+
 ## 10. 2일 구현 순서
 
 | 일차 | 작업 | owner | 완료 evidence |
@@ -404,16 +422,9 @@ sudo logrotate -f /etc/logrotate.d/faq-pipeline
 | Day 1 오후 | CAR pipeline과 MySQL upsert | CAR 담당자 | `evidence/car-pipeline.md`, `evidence/mysql-verification.md` |
 | Day 1 오후 | FAQ pipeline과 MongoDB upsert | FAQ 담당자 | `evidence/faq-pipeline.md`, `evidence/mongodb-verification.md` |
 | Day 2 오전 | cron·단계별 로그·system metric·logrotate | AWS·자동화 담당자 | `evidence/cron-logrotate.md` |
-| Day 2 오후 | 실패·멱등성·보안·전체 통합 검증 | 품질 검토자와 전원 | `evidence/idempotency.md`, `evidence/security-review.md` |
+| Day 2 오후 | run_id·백업·무결성·통합 검증 | 백업/적재 운영자 | `evidence/idempotency.md`, `evidence/security-review.md` |
 
 ## 11. 검토와 baseline
-
-| reviewed_at | reviewer_role | review_result | note |
-|---|---|---|---|
-| `<TODO: YYYY-MM-DD>` | `STK-CAR-DATA-001` | `PASS \| FAIL \| NOT_VERIFIED` | `<TODO>` |
-| `<TODO: YYYY-MM-DD>` | `STK-FAQ-DATA-001` | `PASS \| FAIL \| NOT_VERIFIED` | `<TODO>` |
-| `<TODO: YYYY-MM-DD>` | `STK-PIPE-OPS-001` | `PASS \| FAIL \| NOT_VERIFIED` | `<TODO>` |
-| `<TODO: YYYY-MM-DD>` | `STK-DQ-REV-001` | `PASS \| FAIL \| NOT_VERIFIED` | `<TODO>` |
 
 - 실제 담당자 이름·source·business key·cron 주기가 확정될 때까지 `Draft`를 유지한다.
 - AWS·DB·pipeline·cron·logrotate를 실제로 검증하기 전에는 `PASS` 대신 `planned` 또는 `NOT_VERIFIED`를 사용한다.
